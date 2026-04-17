@@ -1,37 +1,62 @@
+require('dotenv').config();
 const Fastify = require('fastify');
-const Database = require('better-sqlite3');
+const { createClient } = require('@libsql/client');
 
-const db = new Database('state.db');
+const db = createClient({
+  url: process.env.DB_URL,
+  authToken: process.env.DB_TOKEN,
+});
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS state (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    focus INTEGER NOT NULL DEFAULT 0
-  );
-  INSERT OR IGNORE INTO state (id, focus) VALUES (1, 0);
-`);
+async function initDb() {
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      focus INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  await db.execute(`INSERT OR IGNORE INTO state (id, focus) VALUES (1, 0)`);
+}
 
 const app = Fastify();
 
-app.post('/state/on', async () => {
-  db.prepare('UPDATE state SET focus = 1 WHERE id = 1').run();
+app.register(require('@fastify/swagger'), {
+  openapi: {
+    info: { title: 'k-switch API', version: '1.0.0' },
+  },
+});
+
+app.register(require('@fastify/swagger-ui'), {
+  routePrefix: '/docs',
+});
+
+const focusResponse = {
+  200: {
+    type: 'object',
+    properties: { focus: { type: 'integer', enum: [0, 1] } },
+  },
+};
+
+app.post('/state/on', { schema: { response: focusResponse } }, async () => {
+  await db.execute('UPDATE state SET focus = 1 WHERE id = 1');
   return { focus: 1 };
 });
 
-app.post('/state/off', async () => {
-  db.prepare('UPDATE state SET focus = 0 WHERE id = 1').run();
+app.post('/state/off', { schema: { response: focusResponse } }, async () => {
+  await db.execute('UPDATE state SET focus = 0 WHERE id = 1');
   return { focus: 0 };
 });
 
-app.get('/state', async () => {
-  const row = db.prepare('SELECT focus FROM state WHERE id = 1').get();
-  return { focus: row.focus };
+app.get('/state', { schema: { response: focusResponse } }, async () => {
+  const result = await db.execute('SELECT focus FROM state WHERE id = 1');
+  return { focus: result.rows[0].focus };
 });
 
-app.listen({ port: process.env.PORT || 3000, host: '0.0.0.0' }, (err, address) => {
-  if (err) {
-    console.error(err);
-    process.exit(1);
-  }
-  console.log(`Server listening at ${address}`);
+initDb().then(() => {
+  app.listen({ port: process.env.PORT || 3000, host: '0.0.0.0' }, (err, address) => {
+    if (err) {
+      console.error(err);
+      process.exit(1);
+    }
+    console.log(`Server listening at ${address}`);
+  });
 });

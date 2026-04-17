@@ -24,11 +24,18 @@
 
 // the setup function runs once when you press reset or power the board
 
-#define LED_BUILTIN 8
+#include <WiFi.h>
+
+#define LED_BUILTIN 10
 
 void setup() {
-  // initialize digital pin LED_BUILTIN as an output.
+  Serial.begin(115200);
+  while(!Serial);
+  Serial.println("Test");
   pinMode(LED_BUILTIN, OUTPUT);
+
+  Serial.print("MAC Address: ");
+  Serial.println(WiFi.macAddress());
 }
 
 // the loop function runs over and over again forever
@@ -36,5 +43,7 @@ void loop() {
   digitalWrite(LED_BUILTIN, HIGH);  // change state of the LED by setting the pin to the HIGH voltage level
   delay(300);                      // wait for a second
   digitalWrite(LED_BUILTIN, LOW);   // change state of the LED by setting the pin to the LOW voltage level
-  delay(300);                      // wait for a second
+  delay(300);      
+                  // wait for a second
+  Serial.println(WiFi.macAddress());
 }
