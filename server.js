@@ -161,6 +161,12 @@ app.register(async function routes(fastify) {
     return { focus: 0 };
   });
 
+  fastify.post('/state/toggle', { schema: { response: focusResponse } }, async () => {
+    await db.execute('UPDATE state SET focus = 1 - focus WHERE id = 1');
+    const result = await db.execute('SELECT focus FROM state WHERE id = 1');
+    return { focus: result.rows[0].focus };
+  });
+
   fastify.get('/state', { schema: { response: focusResponse } }, async () => {
     const result = await db.execute('SELECT focus FROM state WHERE id = 1');
     return { focus: result.rows[0].focus };
