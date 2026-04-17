@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "debugging-with-ably-cli": {
+      "source": "ably/agent-skills",
+      "sourceType": "github",
+      "computedHash": "5448f564e4b8d33e63b758e403afef30049a5d9285355a903c629af8db49f479"
+    },
+    "using-ably": {
+      "source": "ably/agent-skills",
+      "sourceType": "github",
+      "computedHash": "f53b69d86b65edb3095bab16b6072000c282cadfa6f94585ab68969eb6f7b503"
+    }
+  }
+}

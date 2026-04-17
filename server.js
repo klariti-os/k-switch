@@ -1,11 +1,15 @@
 require('dotenv').config();
 const Fastify = require('fastify');
 const { createClient } = require('@libsql/client');
+const Ably = require('ably');
 
 const db = createClient({
   url: process.env.DB_URL,
   authToken: process.env.DB_TOKEN,
 });
+
+const ably = new Ably.Rest(process.env.ABLY_API_KEY);
+const channel = ably.channels.get('k-switch');
 
 async function initDb() {
   await db.execute(`
@@ -105,6 +109,7 @@ const html = `<!DOCTYPE html>
       <div class="knob"></div>
     </label>
   </div>
+  <script src="https://cdn.ably.com/lib/ably.min-2.js"></script>
   <script>
     const toggle = document.getElementById('toggle');
     const label = document.getElementById('label');
@@ -125,16 +130,19 @@ const html = `<!DOCTYPE html>
       apply(data.focus);
     });
 
-    async function poll() {
-      try {
-        const res = await fetch('/state');
-        const data = await res.json();
-        apply(data.focus);
-      } catch {}
+    async function init() {
+      const res = await fetch('/state');
+      const data = await res.json();
+      apply(data.focus);
+
+      const tokenRes = await fetch('/state/token');
+      const tokenRequest = await tokenRes.json();
+
+      const realtime = new Ably.Realtime({ authCallback: (_params, callback) => callback(null, tokenRequest) });
+      realtime.channels.get('k-switch').subscribe('state', (msg) => apply(msg.data.focus));
     }
 
-    poll();
-    setInterval(poll, 10);
+    init();
   </script>
 </body>
 </html>`;
@@ -151,20 +159,28 @@ app.register(async function routes(fastify) {
     reply.header('content-type', 'text/html; charset=utf-8').send(html);
   });
 
+  fastify.get('/state/token', { schema: { hide: true } }, async () => {
+    return ably.auth.createTokenRequest({ capability: { 'k-switch': ['subscribe'] } });
+  });
+
   fastify.post('/state/on', { schema: { response: focusResponse } }, async () => {
     await db.execute('UPDATE state SET focus = 1 WHERE id = 1');
+    await channel.publish('state', { focus: 1 });
     return { focus: 1 };
   });
 
   fastify.post('/state/off', { schema: { response: focusResponse } }, async () => {
     await db.execute('UPDATE state SET focus = 0 WHERE id = 1');
+    await channel.publish('state', { focus: 0 });
     return { focus: 0 };
   });
 
   fastify.post('/state/toggle', { schema: { response: focusResponse } }, async () => {
     await db.execute('UPDATE state SET focus = 1 - focus WHERE id = 1');
     const result = await db.execute('SELECT focus FROM state WHERE id = 1');
-    return { focus: result.rows[0].focus };
+    const focus = result.rows[0].focus;
+    await channel.publish('state', { focus });
+    return { focus };
   });
 
   fastify.get('/state', { schema: { response: focusResponse } }, async () => {
