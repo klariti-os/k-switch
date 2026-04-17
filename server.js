@@ -29,26 +29,142 @@ app.register(require('@fastify/swagger-ui'), {
   routePrefix: '/docs',
 });
 
-const focusResponse = {
-  200: {
-    type: 'object',
-    properties: { focus: { type: 'integer', enum: [0, 1] } },
-  },
-};
+const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>k-switch</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0f0f0f;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 32px;
+    }
+    .label {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #555;
+      transition: color 0.3s;
+    }
+    .label.on { color: #4ade80; }
+    .switch {
+      position: relative;
+      width: 80px;
+      height: 44px;
+      cursor: pointer;
+    }
+    .switch input { display: none; }
+    .track {
+      position: absolute;
+      inset: 0;
+      background: #1e1e1e;
+      border: 2px solid #2a2a2a;
+      border-radius: 22px;
+      transition: background 0.3s, border-color 0.3s;
+    }
+    .switch input:checked + .track {
+      background: #166534;
+      border-color: #4ade80;
+    }
+    .knob {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      width: 32px;
+      height: 32px;
+      background: #444;
+      border-radius: 50%;
+      transition: transform 0.3s, background 0.3s;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    }
+    .switch input:checked ~ .knob {
+      transform: translateX(36px);
+      background: #4ade80;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <span class="label" id="label">OFF</span>
+    <label class="switch">
+      <input type="checkbox" id="toggle">
+      <div class="track"></div>
+      <div class="knob"></div>
+    </label>
+  </div>
+  <script>
+    const toggle = document.getElementById('toggle');
+    const label = document.getElementById('label');
+    let current = null;
 
-app.post('/state/on', { schema: { response: focusResponse } }, async () => {
-  await db.execute('UPDATE state SET focus = 1 WHERE id = 1');
-  return { focus: 1 };
-});
+    function apply(focus) {
+      if (focus === current) return;
+      current = focus;
+      toggle.checked = focus === 1;
+      label.textContent = focus === 1 ? 'ON' : 'OFF';
+      label.className = 'label' + (focus === 1 ? ' on' : '');
+    }
 
-app.post('/state/off', { schema: { response: focusResponse } }, async () => {
-  await db.execute('UPDATE state SET focus = 0 WHERE id = 1');
-  return { focus: 0 };
-});
+    toggle.addEventListener('change', async () => {
+      const url = toggle.checked ? '/state/on' : '/state/off';
+      const res = await fetch(url, { method: 'POST' });
+      const data = await res.json();
+      apply(data.focus);
+    });
 
-app.get('/state', { schema: { response: focusResponse } }, async () => {
-  const result = await db.execute('SELECT focus FROM state WHERE id = 1');
-  return { focus: result.rows[0].focus };
+    async function poll() {
+      try {
+        const res = await fetch('/state');
+        const data = await res.json();
+        apply(data.focus);
+      } catch {}
+    }
+
+    poll();
+    setInterval(poll, 10);
+  </script>
+</body>
+</html>`;
+
+app.register(async function routes(fastify) {
+  const focusResponse = {
+    200: {
+      type: 'object',
+      properties: { focus: { type: 'integer', enum: [0, 1] } },
+    },
+  };
+
+  fastify.get('/', { schema: { hide: true } }, async (_req, reply) => {
+    reply.header('content-type', 'text/html; charset=utf-8').send(html);
+  });
+
+  fastify.post('/state/on', { schema: { response: focusResponse } }, async () => {
+    await db.execute('UPDATE state SET focus = 1 WHERE id = 1');
+    return { focus: 1 };
+  });
+
+  fastify.post('/state/off', { schema: { response: focusResponse } }, async () => {
+    await db.execute('UPDATE state SET focus = 0 WHERE id = 1');
+    return { focus: 0 };
+  });
+
+  fastify.get('/state', { schema: { response: focusResponse } }, async () => {
+    const result = await db.execute('SELECT focus FROM state WHERE id = 1');
+    return { focus: result.rows[0].focus };
+  });
 });
 
 initDb().then(() => {

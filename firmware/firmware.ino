@@ -30,10 +30,12 @@
 
 void setup() {
   Serial.begin(115200);
-  while(!Serial);
   Serial.println("Test");
   pinMode(LED_BUILTIN, OUTPUT);
 
+  Serial.println("Before WiFi.mode");
+  WiFi.mode(WIFI_STA);
+  Serial.println("After WiFi.mode");
   Serial.print("MAC Address: ");
   Serial.println(WiFi.macAddress());
 }
